@@ -1,0 +1,178 @@
+// Base de datos de Clip-AI. Un solo archivo SQLite (data/clipai.db), sin servidor que instalar.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum ProjectMode {
+  RECORDED    // video subido o enlace compatible
+  LIVE_STREAM // transmisión externa (OBS -> nuestro servidor de ingesta)
+  LIVE_MOBILE // grabación directa con cámara/mic del teléfono
+}
+
+enum ProjectStatus {
+  CREATED
+  CONNECTING
+  RECORDING
+  TRANSCRIBING
+  ANALYZING
+  GENERATING
+  FINISHED
+  ERROR
+}
+
+enum ClipFormat {
+  VERTICAL_9_16
+  SQUARE_1_1
+  HORIZONTAL_16_9
+}
+
+model Project {
+  id        String        @id @default(uuid())
+  name      String
+  mode      ProjectMode
+  status    ProjectStatus @default(CREATED)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  // Configuración elegida por el usuario para este proyecto
+  desiredClipCount   Int        @default(5)
+  minClipSeconds     Int        @default(20)
+  maxClipSeconds     Int        @default(90)
+  language           String     @default("es")
+  subtitleLanguage   String     @default("es")
+  format             ClipFormat @default(VERTICAL_9_16)
+  subtitleStyle      String     @default("default") // nombre de un preset de estilos
+  priorityTopics     String?    // texto libre, separado por comas
+  excludedTopics     String?    // texto libre, separado por comas
+  minQualityScore    Int        @default(50) // 0-100, umbral mínimo para aceptar un fragmento
+
+  // Origen del video
+  sourceType  String  // "upload" | "url" | "live_stream" | "live_mobile"
+  sourceUrl   String? // enlace pegado por el usuario, si aplica
+  originalPath String? // ruta al archivo original guardado en disco
+  durationSec Double?  // duración total conocida (se llena cuando se sabe)
+
+  errorMessage String?
+
+  segments   Segment[]
+  candidates Candidate[]
+  clips      Clip[]
+  jobs       Job[]
+
+  @@index([status])
+}
+
+// Un tramo de transcripción con tiempos. En modo en vivo se van agregando mientras llega audio.
+model Segment {
+  id         String   @id @default(uuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  startSec   Float
+  endSec     Float
+  text       String
+  wordsJson  String   // JSON con palabras + tiempos individuales (si el proveedor los da)
+  createdAt  DateTime @default(now())
+
+  @@index([projectId])
+}
+
+enum CandidateStatus {
+  DETECTED   // la IA lo propuso
+  QUEUED     // en cola para generar el clip
+  GENERATING
+  READY
+  DISCARDED
+  ERROR
+}
+
+// Un momento candidato detectado por la IA, antes (o después) de convertirse en clip
+model Candidate {
+  id         String          @id @default(uuid())
+  projectId  String
+  project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  startSec   Float
+  endSec     Float
+  score      Int             // 0-100, estimación de potencial
+  reason     String          // motivo breve de la selección, en lenguaje simple
+  category   String?         // humor, historia, revelación, debate, etc.
+  status     CandidateStatus @default(DETECTED)
+  discardReason String?
+  createdAt  DateTime        @default(now())
+
+  clip Clip?
+
+  @@index([projectId, status])
+}
+
+enum ClipStatus {
+  QUEUED
+  GENERATING
+  READY
+  DISCARDED
+  ERROR
+}
+
+// Un clip ya generado (o en proceso de generarse)
+model Clip {
+  id          String     @id @default(uuid())
+  projectId   String
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  candidateId String?    @unique
+  candidate   Candidate? @relation(fields: [candidateId], references: [id])
+
+  title       String
+  description String?
+  hashtags    String?
+
+  startSec    Float
+  endSec      Float
+  format      ClipFormat
+  filePath    String?    // ruta del mp4 final
+  thumbnailPath String?
+  subtitlesJson String?  // subtítulos editables (lista de {startSec,endSec,text})
+
+  score       Int
+  reason      String
+  status      ClipStatus @default(QUEUED)
+  errorMessage String?
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([projectId, status])
+}
+
+enum JobType {
+  TRANSCRIBE_SEGMENT
+  ANALYZE_SEGMENTS
+  RENDER_CLIP
+  FINALIZE_PROJECT
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
+// La "cola de tareas" simple: una tabla que el trabajador en segundo plano revisa constantemente
+model Job {
+  id         String    @id @default(uuid())
+  projectId  String
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type       JobType
+  status     JobStatus @default(PENDING)
+  payloadJson String   // datos que necesita el trabajo (ej. ids de segmentos a analizar)
+  attempts   Int       @default(0)
+  errorMessage String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([status, type])
+}
