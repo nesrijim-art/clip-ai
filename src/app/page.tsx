@@ -19,6 +19,12 @@ export default function HomePage() {
         >
           📱 Modo grabación en vivo (teléfono)
         </Link>
+        <Link
+          href="/live-stream"
+          className="rounded-lg border border-neutral-700 px-4 py-2 hover:border-neutral-500"
+        >
+          📡 Transmisión en vivo (OBS / encoder)
+        </Link>
       </div>
 
       <NewProjectForm />

@@ -4,8 +4,11 @@ export type ProjectStatus =
   | "CONNECTING"
   | "RECORDING"
   | "TRANSCRIBING"
+  | "TRANSCRIBED"
   | "ANALYZING"
+  | "ANALYZED"
   | "GENERATING"
+  | "CLIPS_READY"
   | "FINISHED"
   | "ERROR";
 export type ClipFormat = "VERTICAL_9_16" | "SQUARE_1_1" | "HORIZONTAL_16_9";
@@ -27,8 +30,11 @@ export const STATUS_LABELS: Record<ProjectStatus, string> = {
   CONNECTING: "Conectando",
   RECORDING: "Grabando",
   TRANSCRIBING: "Transcribiendo",
+  TRANSCRIBED: "Transcrito",
   ANALYZING: "Analizando",
+  ANALYZED: "Analizado",
   GENERATING: "Generando clips",
+  CLIPS_READY: "Clips listos",
   FINISHED: "Finalizado",
   ERROR: "Error",
 };

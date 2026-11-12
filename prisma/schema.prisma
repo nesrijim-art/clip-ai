@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
 }
 
 enum ProjectMode {
@@ -19,8 +18,11 @@ enum ProjectStatus {
   CONNECTING
   RECORDING
   TRANSCRIBING
+  TRANSCRIBED
   ANALYZING
+  ANALYZED
   GENERATING
+  CLIPS_READY
   FINISHED
   ERROR
 }
@@ -55,7 +57,20 @@ model Project {
   sourceType  String  // "upload" | "url" | "live_stream" | "live_mobile"
   sourceUrl   String? // enlace pegado por el usuario, si aplica
   originalPath String? // ruta al archivo original guardado en disco
-  durationSec Double?  // duración total conocida (se llena cuando se sabe)
+  durationSec Float?   // duración total conocida (se llena cuando se sabe)
+
+  // Modo en vivo (teléfono o transmisión externa): cuánto de la grabación ya
+  // se transcribió/analizó, para no repetir trabajo en cada pasada.
+  processedSec   Float   @default(0)
+  analyzedSec    Float   @default(0)
+  liveChunkCount Int     @default(0)
+  isRecording    Boolean @default(false)
+
+  // Consumo real acumulado, para poder estimar el costo (no es una factura,
+  // es una estimación basada en el uso real registrado por esta app).
+  deepgramSecondsUsed Float @default(0)
+  claudeInputTokens   Int   @default(0)
+  claudeOutputTokens  Int   @default(0)
 
   errorMessage String?
 
@@ -100,6 +115,9 @@ model Candidate {
   score      Int             // 0-100, estimación de potencial
   reason     String          // motivo breve de la selección, en lenguaje simple
   category   String?         // humor, historia, revelación, debate, etc.
+  suggestedTitle String?     // título sugerido por la IA, se usa al generar el clip
+  suggestedDescription String? // descripción sugerida por la IA para publicar el clip
+  suggestedHashtags String?     // hashtags sugeridos por la IA, separados por espacio
   status     CandidateStatus @default(DETECTED)
   discardReason String?
   createdAt  DateTime        @default(now())

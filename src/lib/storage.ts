@@ -26,6 +26,14 @@ export function thumbnailPathFor(projectId: string, clipId: string) {
   return path.join(THUMBNAILS_DIR, projectId, `${clipId}.jpg`);
 }
 
+export function clipsDirFor(projectId: string) {
+  return path.join(CLIPS_DIR, projectId);
+}
+
+export function thumbnailsDirFor(projectId: string) {
+  return path.join(THUMBNAILS_DIR, projectId);
+}
+
 /** Tamaño de un archivo en bytes, o null si no existe. */
 export function fileSizeBytes(filePath: string): number | null {
   try {
@@ -33,4 +41,34 @@ export function fileSizeBytes(filePath: string): number | null {
   } catch {
     return null;
   }
+}
+
+function dirSizeBytes(dirPath: string): number {
+  let total = 0;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  for (const entry of entries) {
+    const full = path.join(dirPath, entry.name);
+    total += entry.isDirectory() ? dirSizeBytes(full) : (fileSizeBytes(full) ?? 0);
+  }
+  return total;
+}
+
+/** Espacio real en disco que ocupa un proyecto: original + clips + miniaturas. */
+export function projectStorageBytes(originalPath: string | null, projectId: string): number {
+  const originalSize = originalPath ? fileSizeBytes(originalPath) ?? 0 : 0;
+  return originalSize + dirSizeBytes(clipsDirFor(projectId)) + dirSizeBytes(thumbnailsDirFor(projectId));
+}
+
+/** Borra todos los archivos en disco de un proyecto (original, clips, miniaturas). */
+export function deleteProjectFiles(originalPath: string | null, projectId: string) {
+  if (originalPath && fs.existsSync(originalPath)) {
+    fs.rmSync(originalPath, { force: true });
+  }
+  fs.rmSync(clipsDirFor(projectId), { recursive: true, force: true });
+  fs.rmSync(thumbnailsDirFor(projectId), { recursive: true, force: true });
 }
